@@ -10,6 +10,7 @@ import (
 
 	"github.com/gliderlabs/registrator/bridge"
 	consulapi "github.com/hashicorp/consul/api"
+	cleanhttp "github.com/hashicorp/go-cleanhttp"
 )
 
 const DefaultInterval = "10s"
