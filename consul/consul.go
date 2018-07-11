@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"log"
 	"net/url"
-	"strings"
 	"os"
 	"strconv"
+	"strings"
+
 	"github.com/gliderlabs/registrator/bridge"
 	consulapi "github.com/hashicorp/consul/api"
-	"github.com/hashicorp/go-cleanhttp"
 )
 
 const DefaultInterval = "10s"
@@ -22,8 +22,8 @@ func init() {
 }
 
 func (r *ConsulAdapter) interpolateService(script string, service *bridge.Service) string {
-	withIp := strings.Replace(script, "$SERVICE_IP", service.Origin.HostIP, -1)
-	withPort := strings.Replace(withIp, "$SERVICE_PORT", service.Origin.HostPort, -1)
+	withIp := strings.Replace(script, "$SERVICE_IP", service.IP, -1)
+	withPort := strings.Replace(withIp, "$SERVICE_PORT", strconv.Itoa(service.Port), -1)
 	return withPort
 }
 
@@ -34,16 +34,16 @@ func (f *Factory) New(uri *url.URL) bridge.RegistryAdapter {
 	if uri.Scheme == "consul-unix" {
 		config.Address = strings.TrimPrefix(uri.String(), "consul-")
 	} else if uri.Scheme == "consul-tls" {
-	        tlsConfigDesc := &consulapi.TLSConfig {
-			  Address: uri.Host,
-			  CAFile: os.Getenv("CONSUL_CACERT"),
-  			  CertFile: os.Getenv("CONSUL_TLSCERT"),
-  			  KeyFile: os.Getenv("CONSUL_TLSKEY"),
-			  InsecureSkipVerify: false,
+		tlsConfigDesc := &consulapi.TLSConfig{
+			Address:            uri.Host,
+			CAFile:             os.Getenv("CONSUL_CACERT"),
+			CertFile:           os.Getenv("CONSUL_TLSCERT"),
+			KeyFile:            os.Getenv("CONSUL_TLSKEY"),
+			InsecureSkipVerify: false,
 		}
 		tlsConfig, err := consulapi.SetupTLSConfig(tlsConfigDesc)
 		if err != nil {
-		   log.Fatal("Cannot set up Consul TLSConfig", err)
+			log.Fatal("Cannot set up Consul TLSConfig", err)
 		}
 		config.Scheme = "https"
 		transport := cleanhttp.DefaultPooledTransport()
@@ -84,6 +84,7 @@ func (r *ConsulAdapter) Register(service *bridge.Service) error {
 	registration.Tags = service.Tags
 	registration.Address = service.IP
 	registration.Check = r.buildCheck(service)
+	registration.Meta = service.Attrs
 	return r.client.Agent().ServiceRegister(registration)
 }
 
@@ -125,6 +126,9 @@ func (r *ConsulAdapter) buildCheck(service *bridge.Service) *consulapi.AgentServ
 		} else {
 			check.Interval = DefaultInterval
 		}
+	}
+	if deregister_after := service.Attrs["check_deregister_after"]; deregister_after != "" {
+		check.DeregisterCriticalServiceAfter = deregister_after
 	}
 	return check
 }
